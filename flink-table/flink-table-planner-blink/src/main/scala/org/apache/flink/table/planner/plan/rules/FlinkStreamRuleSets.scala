@@ -140,7 +140,8 @@ object FlinkStreamRuleSets {
     */
   private val FILTER_RULES: RuleSet = RuleSets.ofList(
     // push a filter into a join
-    CoreRules.FILTER_INTO_JOIN,
+//    CoreRules.FILTER_INTO_JOIN,,
+    MyFlinkFilterJoinRule.INSTANCE,
     // push filter into the children of a join
     CoreRules.JOIN_CONDITION_PUSH,
     // push filter through an aggregation
