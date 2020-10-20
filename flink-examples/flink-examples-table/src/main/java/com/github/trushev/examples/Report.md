@@ -1,4 +1,4 @@
-## Result plan
+## Abstract
 
 ```
 == Abstract Syntax Tree ==
@@ -9,19 +9,42 @@ LogicalProject(player=[$0], rank=[$1], score=[$3])
       +- LogicalTableScan(table=[[default_catalog, default_database, Scores]])
 ```
 
+## Default optimized plan
+
 ```
 == Optimized Logical Plan ==
 Calc(select=[player, rank, score])
 +- Join(joinType=[InnerJoin], where=[=(player, player0)], select=[player, rank, player0, score], leftInputSpec=[NoUniqueKey], rightInputSpec=[NoUniqueKey])
-   :- Exchange(distribution=[hash[player]])
-   :  +- DataStreamScan(table=[[default_catalog, default_database, Ranks]], fields=[player, rank])
-   +- Exchange(distribution=[hash[player]])
-      +- Calc(select=[player, score], where=[<>(player, _UTF-16LE'Sasha':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")])
-         +- DataStreamScan(table=[[default_catalog, default_database, Scores]], fields=[player, score])
+
+->   :- Exchange(distribution=[hash[player]])
+->   :  +- DataStreamScan(table=[[default_catalog, default_database, Ranks]], fields=[player, rank])
+
+     +- Exchange(distribution=[hash[player]])
+        +- Calc(select=[player, score], where=[<>(player, _UTF-16LE'Sasha':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")])
+           +- DataStreamScan(table=[[default_catalog, default_database, Scores]], fields=[player, score])
+```
+
+## My optimized plan
+
+```
+== Optimized Logical Plan ==
+Calc(select=[player, rank, score])
++- Join(joinType=[InnerJoin], where=[=(player, player0)], select=[player, rank, player0, score], leftInputSpec=[NoUniqueKey], rightInputSpec=[NoUniqueKey])
+
+->   :- Exchange(distribution=[hash[player]])
+->   :  +- Calc(select=[player, rank], where=[<>(player, _UTF-16LE'Sasha':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")])
+->   :     +- DataStreamScan(table=[[default_catalog, default_database, Ranks]], fields=[player, rank])
+
+     +- Exchange(distribution=[hash[player]])
+        +- Calc(select=[player, score], where=[<>(player, _UTF-16LE'Sasha':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")])
+           +- DataStreamScan(table=[[default_catalog, default_database, Scores]], fields=[player, score])
+
 ```
 
 
-## Plan evolution 1
+## Developing info 
+
+### Plan evolution 1
 Debug loop at
 ```java
 org.apache.flink.table.planner.plan.optimize.program.FlinkChainedProgram.optimize
@@ -32,7 +55,7 @@ Explain tool
 FlinkRelOptUtil.getDigest(result)
 ```
 
-### init
+#### init
 ```
 LogicalLegacySink(name=[DataStreamTableSink], fields=[player, rank, score]), rowType=[RAW(RAW('org.apache.flink.types.Row', ?))]
 LogicalProject(inputs=[0..1], exprs=[[$3]]), rowType=[RecordType(VARCHAR(2147483647) player, INTEGER rank, DOUBLE score)]
