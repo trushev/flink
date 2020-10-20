@@ -39,11 +39,11 @@ public class FilterPushDownExample {
 				"SELECT r.*, s.score " +
 				"FROM Ranks AS r JOIN Scores AS s " +
 				"ON r.player = s.player " +
-				"WHERE s.player <> 'Sasha'";
+				"WHERE s.player = 'Sasha'";
 		final Table table = tEnv.sqlQuery(sqlQuery);
 		tEnv.toAppendStream(table, Row.class).print();
 		System.out.println(table.explain());
-//		env.execute();
+		env.execute();
 //		System.out.println(env.getStreamGraph().getStreamingPlanAsJSON());
 	}
 }
