@@ -1,11 +1,9 @@
 package org.apache.flink.table.planner.plan.rules.logical;
 
-import com.google.common.collect.ImmutableSet;
 import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.rel.core.Filter;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.logical.LogicalFilter;
 import org.apache.calcite.rel.rules.FilterJoinRule;
 import org.apache.calcite.rex.RexBuilder;
@@ -17,11 +15,14 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 
 import java.util.List;
 
+/**
+ * My rule.
+ */
 public class MyFlinkFilterJoinRule extends FilterJoinRule.FilterIntoJoinRule {
 	public static final MyFlinkFilterJoinRule INSTANCE = new MyFlinkFilterJoinRule();
 
 	private MyFlinkFilterJoinRule() {
-		super(true, RelFactories.LOGICAL_BUILDER, FilterJoinRule.TRUE_PREDICATE);
+		super(Config.DEFAULT);
 	}
 
 	@Override
@@ -60,7 +61,7 @@ public class MyFlinkFilterJoinRule extends FilterJoinRule.FilterIntoJoinRule {
 		return LogicalFilter.create(
 				filter.getInput(),
 				newFilterCondition,
-				ImmutableSet.copyOf(filter.getVariablesSet())
+				com.google.common.collect.ImmutableSet.copyOf(filter.getVariablesSet())
 		);
 	}
 
