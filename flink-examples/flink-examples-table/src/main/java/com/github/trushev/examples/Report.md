@@ -141,26 +141,63 @@ LogicalTableScan(table=[[default_catalog, default_database, Scores]]), rowType=[
 
 ## Plan evolution 2
 
-Debug loop at
-```java
-org.apache.flink.table.planner.plan.optimize.program.FlinkGroupProgram.optimize
-```
+### SQL with EQUALS
 
-Breakpoint: FlinkGroupProgram.scala:60
-
-Condition:
-```java
-programs.get(0)._2.equals("filter rules")
 ```
-
-### init
+LogicalFilter(condition=[=($2, _UTF-16LE'Sasha')])
+  LogicalJoin(condition=[=($0, $2)], joinType=[inner])
+    LogicalTableScan(table=[[default_catalog, default_database, Ranks]])
+    LogicalTableScan(table=[[default_catalog, default_database, Scores]])
 ```
-LogicalLegacySink(name=[DataStreamTableSink], fields=[player, rank, score]), rowType=[RAW(RAW('org.apache.flink.types.Row', ?))]
-LogicalProject(inputs=[0..1], exprs=[[$3]]), rowType=[RecordType(VARCHAR(2147483647) player, INTEGER rank, DOUBLE score)]
-LogicalFilter(condition=[<>($2, _UTF-16LE'Sasha')]), rowType=[RecordType(VARCHAR(2147483647) player, INTEGER rank, VARCHAR(2147483647) player0, DOUBLE score)]
-LogicalJoin(condition=[=($0, $2)], joinType=[inner]), rowType=[RecordType(VARCHAR(2147483647) player, INTEGER rank, VARCHAR(2147483647) player0, DOUBLE score)]
-LogicalTableScan(table=[[default_catalog, default_database, Ranks]]), rowType=[RecordType(VARCHAR(2147483647) player, INTEGER rank)]
-LogicalTableScan(table=[[default_catalog, default_database, Scores]]), rowType=[RecordType(VARCHAR(2147483647) player, DOUBLE score)]
+______________________________
+MyFlinkFilterJoinRule
+______________________________
+```
+LogicalJoin(condition=[=($0, $2)], joinType=[inner])
+  LogicalTableScan(table=[[default_catalog, default_database, Ranks]])
+  LogicalFilter(condition=[=($0, _UTF-16LE'Sasha')])
+    LogicalTableScan(table=[[default_catalog, default_database, Scores]])
+```
+______________________________
+ReduceExpressionsRule(Join)
+______________________________
+```
+LogicalJoin(condition=[=($0, _UTF-16LE'Sasha')], joinType=[inner])
+  LogicalTableScan(table=[[default_catalog, default_database, Ranks]])
+  LogicalFilter(condition=[=($0, _UTF-16LE'Sasha')])
+    LogicalTableScan(table=[[default_catalog, default_database, Scores]])
+```
+______________________________
+JoinConditionPushRule
+______________________________
+```
+LogicalJoin(condition=[true], joinType=[inner])
+  LogicalFilter(condition=[=($0, _UTF-16LE'Sasha')])
+    LogicalTableScan(table=[[default_catalog, default_database, Ranks]])
+  LogicalFilter(condition=[=($0, _UTF-16LE'Sasha')])
+    LogicalTableScan(table=[[default_catalog, default_database, Scores]])
+```
+______________________________
+...
+______________________________
+```
+LogicalProject(player=[$0], rank=[$1], score=[$3])
+  LogicalJoin(condition=[true], joinType=[inner])
+    LogicalFilter(condition=[=($0, _UTF-16LE'Sasha')])
+      LogicalTableScan(table=[[default_catalog, default_database, Ranks]])
+    LogicalFilter(condition=[=($0, _UTF-16LE'Sasha')])
+      LogicalTableScan(table=[[default_catalog, default_database, Scores]])
+```
+______________________________
+ReduceExpressionsRule(Project)
+______________________________
+```
+LogicalProject(player=[CAST(_UTF-16LE'Sasha':VARCHAR(2147483647) CHARACTER SET "UTF-16LE"):VARCHAR(2147483647) CHARACTER SET "UTF-16LE"], rank=[$1], score=[$3])
+  LogicalJoin(condition=[true], joinType=[inner])
+    LogicalFilter(condition=[=($0, _UTF-16LE'Sasha')])
+      LogicalTableScan(table=[[default_catalog, default_database, Ranks]])
+    LogicalFilter(condition=[=($0, _UTF-16LE'Sasha')])
+      LogicalTableScan(table=[[default_catalog, default_database, Scores]])
 ```
 
 ```
