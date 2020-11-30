@@ -52,4 +52,12 @@ public interface RollingPolicy<IN, BucketID> extends Serializable {
 	 * @return {@code True} if the part file should roll, {@link false} otherwise.
 	 */
 	boolean shouldRollOnProcessingTime(final PartFileInfo<BucketID> partFileState, final long currentTime) throws IOException;
+
+	/**
+	 * Determines if outdated parts should parts should be removed.
+	 * @return {@code True} if outdated parts should be removed, {@link false} otherwise.
+	 */
+	default boolean shouldRemoveOutdatedParts() {
+		return false;
+	}
 }

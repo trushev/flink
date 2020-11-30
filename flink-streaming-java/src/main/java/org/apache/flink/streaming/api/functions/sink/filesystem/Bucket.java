@@ -29,6 +29,7 @@ import javax.annotation.Nullable;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -326,6 +327,20 @@ public class Bucket<IN, BucketID> {
 						subtaskIndex, bucketId, inProgressPart.getCreationTime(), inProgressPart.getLastUpdateTime(), timestamp);
 			}
 			closePartFile();
+		}
+	}
+
+	void removeOutdatedParts(final Collection<Integer> previousSubtaskIndexes) {
+		final CleanableBucket cleanableBucket = new BucketOutdatedParts(
+			this.partCounter,
+			previousSubtaskIndexes,
+			this.bucketPath,
+			this.outputFileConfig
+		);
+		try {
+			cleanableBucket.clean();
+		} catch (final IOException e) {
+			LOG.error("Error while removing outdated parts", e);
 		}
 	}
 

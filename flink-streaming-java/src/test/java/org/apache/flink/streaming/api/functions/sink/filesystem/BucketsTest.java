@@ -38,6 +38,8 @@ import org.junit.rules.TemporaryFolder;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -45,8 +47,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.hasSize;
 
 /**
  * Tests for {@link Buckets}.
@@ -67,20 +71,21 @@ public class BucketsTest {
 
 		final ListState<byte[]> bucketStateContainer = new MockListState<>();
 		final ListState<Long> partCounterContainer = new MockListState<>();
+		final ListState<Integer> previousSubtaskIndexState = new MockListState<>();
 
 		buckets.onElement("test1", new TestUtils.MockSinkContext(null, 1L, 2L));
-		buckets.snapshotState(0L, bucketStateContainer, partCounterContainer);
+		buckets.snapshotState(0L, bucketStateContainer, partCounterContainer, previousSubtaskIndexState);
 
 		assertThat(buckets.getActiveBuckets().get("test1"), hasSinglePartFileToBeCommittedOnCheckpointAck(path, "test1"));
 
 		buckets.onElement("test2", new TestUtils.MockSinkContext(null, 1L, 2L));
-		buckets.snapshotState(1L, bucketStateContainer, partCounterContainer);
+		buckets.snapshotState(1L, bucketStateContainer, partCounterContainer, previousSubtaskIndexState);
 
 		assertThat(buckets.getActiveBuckets().get("test1"), hasSinglePartFileToBeCommittedOnCheckpointAck(path, "test1"));
 		assertThat(buckets.getActiveBuckets().get("test2"), hasSinglePartFileToBeCommittedOnCheckpointAck(path, "test2"));
 
 		Buckets<String, String> restoredBuckets =
-				restoreBuckets(path, onCheckpointRollingPolicy, 0, bucketStateContainer, partCounterContainer);
+				restoreBuckets(path, onCheckpointRollingPolicy, 0, bucketStateContainer, partCounterContainer, previousSubtaskIndexState);
 
 		final Map<String, Bucket<String, String>> activeBuckets = restoredBuckets.getActiveBuckets();
 
@@ -125,11 +130,14 @@ public class BucketsTest {
 		final MockListState<Long> partCounterContainerOne = new MockListState<>();
 		final MockListState<Long> partCounterContainerTwo = new MockListState<>();
 
+		final MockListState<Integer> previousSubtaskIndexStateOne = new MockListState<>();
+		final MockListState<Integer> previousSubtaskIndexStateTwo = new MockListState<>();
+
 		final Buckets<String, String> bucketsOne = createBuckets(path, onCheckpointRP, 0);
 		final Buckets<String, String> bucketsTwo = createBuckets(path, onCheckpointRP, 1);
 
 		bucketsOne.onElement("test1", new TestUtils.MockSinkContext(null, 1L, 2L));
-		bucketsOne.snapshotState(0L, bucketStateContainerOne, partCounterContainerOne);
+		bucketsOne.snapshotState(0L, bucketStateContainerOne, partCounterContainerOne, previousSubtaskIndexStateOne);
 
 		Assert.assertEquals(1L, bucketsOne.getMaxPartCounter());
 
@@ -142,7 +150,7 @@ public class BucketsTest {
 
 		bucketsTwo.onElement("test1", new TestUtils.MockSinkContext(null, 1L, 2L));
 
-		bucketsTwo.snapshotState(0L, bucketStateContainerTwo, partCounterContainerTwo);
+		bucketsTwo.snapshotState(0L, bucketStateContainerTwo, partCounterContainerTwo, previousSubtaskIndexStateTwo);
 
 		Assert.assertEquals(2L, bucketsTwo.getMaxPartCounter());
 
@@ -152,6 +160,7 @@ public class BucketsTest {
 
 		final ListState<byte[]> mergedBucketStateContainer = new MockListState<>();
 		final ListState<Long> mergedPartCounterContainer = new MockListState<>();
+		final ListState<Integer> mergedPreviousSubtaskIndex = new MockListState<>();
 
 		mergedBucketStateContainer.addAll(bucketStateContainerOne.getBackingList());
 		mergedBucketStateContainer.addAll(bucketStateContainerTwo.getBackingList());
@@ -159,8 +168,11 @@ public class BucketsTest {
 		mergedPartCounterContainer.addAll(partCounterContainerOne.getBackingList());
 		mergedPartCounterContainer.addAll(partCounterContainerTwo.getBackingList());
 
+		mergedPreviousSubtaskIndex.addAll(previousSubtaskIndexStateOne.getBackingList());
+		mergedPreviousSubtaskIndex.addAll(previousSubtaskIndexStateTwo.getBackingList());
+
 		final Buckets<String, String> restoredBuckets =
-				restoreBuckets(path, onCheckpointRP, 0, mergedBucketStateContainer, mergedPartCounterContainer);
+				restoreBuckets(path, onCheckpointRP, 0, mergedBucketStateContainer, mergedPartCounterContainer, mergedPreviousSubtaskIndex);
 
 		// we get the maximum of the previous tasks
 		Assert.assertEquals(2L, restoredBuckets.getMaxPartCounter());
@@ -234,7 +246,7 @@ public class BucketsTest {
 		buckets.onProcessingTime(7L);
 		Assert.assertEquals(1L, rollOnProcessingTimeCountingPolicy.getOnProcessingTimeRollCounter());
 
-		buckets.snapshotState(0L, new MockListState<>(), new MockListState<>());
+		buckets.snapshotState(0L, new MockListState<>(), new MockListState<>(), new MockListState<>());
 		buckets.commitUpToCheckpoint(0L);
 
 		Assert.assertTrue(buckets.getActiveBuckets().isEmpty());
@@ -260,7 +272,7 @@ public class BucketsTest {
 		Assert.assertEquals(1L, rollOnProcessingTimeCountingPolicy.getOnProcessingTimeRollCounter());
 		Assert.assertEquals(1L, buckets.getActiveBuckets().get("test").getPartCounter());
 
-		buckets.snapshotState(0L, new MockListState<>(), new MockListState<>());
+		buckets.snapshotState(0L, new MockListState<>(), new MockListState<>(), new MockListState<>());
 		buckets.commitUpToCheckpoint(0L);
 
 		Assert.assertTrue(buckets.getActiveBuckets().isEmpty());
@@ -391,18 +403,19 @@ public class BucketsTest {
 			OutputFileConfig.builder().build());
 		ListState<byte[]> bucketStateContainer = new MockListState<>();
 		ListState<Long> partCounterContainer = new MockListState<>();
+		ListState<Integer> previousSubtaskIndex = new MockListState<>();
 
 		buckets.onElement("test1", new TestUtils.MockSinkContext(null, 1L, 2L));
 		buckets.onElement("test2", new TestUtils.MockSinkContext(null, 1L, 3L));
 
 		// Will close the part file writer of the bucket "test1".
 		buckets.onProcessingTime(4);
-		buckets.snapshotState(0, bucketStateContainer, partCounterContainer);
+		buckets.snapshotState(0, bucketStateContainer, partCounterContainer, previousSubtaskIndex);
 		buckets.commitUpToCheckpoint(0);
 
 		// Will close the part file writer of the bucket "test2".
 		buckets.onProcessingTime(6);
-		buckets.snapshotState(1, bucketStateContainer, partCounterContainer);
+		buckets.snapshotState(1, bucketStateContainer, partCounterContainer, previousSubtaskIndex);
 		buckets.commitUpToCheckpoint(1);
 
 		List<Tuple2<RecordBucketLifeCycleListener.EventType, String>> expectedEvents = Arrays.asList(
@@ -429,6 +442,7 @@ public class BucketsTest {
 			OutputFileConfig.builder().build());
 		ListState<byte[]> bucketStateContainer = new MockListState<>();
 		ListState<Long> partCounterContainer = new MockListState<>();
+		ListState<Integer> previousSubtaskIndex = new MockListState<>();
 
 		buckets.onElement("test1", new TestUtils.MockSinkContext(null, 1L, 2L));
 		buckets.onElement("test2", new TestUtils.MockSinkContext(null, 1L, 3L));
@@ -436,7 +450,7 @@ public class BucketsTest {
 		// Will close the part file writer of the bucket "test1". Now bucket "test1" have only
 		// one pending file while bucket "test2" has an on-writing in-progress file.
 		buckets.onProcessingTime(4);
-		buckets.snapshotState(0, bucketStateContainer, partCounterContainer);
+		buckets.snapshotState(0, bucketStateContainer, partCounterContainer, previousSubtaskIndex);
 
 		// On restoring the bucket "test1" will commit its pending file and become inactive.
 		buckets = restoreBuckets(
@@ -447,6 +461,7 @@ public class BucketsTest {
 			0,
 			bucketStateContainer,
 			partCounterContainer,
+			previousSubtaskIndex,
 			OutputFileConfig.builder().build());
 
 		Assert.assertEquals(new HashSet<>(Collections.singletonList("test2")), buckets.getActiveBuckets().keySet());
@@ -524,6 +539,36 @@ public class BucketsTest {
 		}
 	}
 
+	@Test
+	public void testRemoveOutdatedPartOnRestoring() throws Exception {
+		final File outDir = TEMP_FOLDER.newFolder();
+		final Path path = new Path(outDir.toURI());
+		final java.nio.file.Path bucketPath = Paths.get(path.getPath(), "test1");
+		final RollingPolicy<String, String> policy = OnCheckpointRollingPolicy
+			.<String, String>builder()
+			.removeOutdatedParts(true)
+			.build();
+		final Buckets<String, String> buckets = createBuckets(path, policy, 0);
+		final ListState<byte[]> bucketStateContainer = new MockListState<>();
+		final ListState<Long> partCounterContainer = new MockListState<>();
+		final ListState<Integer> previousSubtaskIndexState = new MockListState<>();
+
+		buckets.onElement("test1", new TestUtils.MockSinkContext(null, 1L, 2L));
+		buckets.snapshotState(0L, bucketStateContainer, partCounterContainer, previousSubtaskIndexState);
+		buckets.onElement("test1", new TestUtils.MockSinkContext(null, 1L, 2L));
+		assertThat(listBucket(bucketPath), hasSize(2));
+
+		restoreBuckets(
+			path,
+			policy,
+			0,
+			bucketStateContainer,
+			partCounterContainer,
+			previousSubtaskIndexState
+		);
+		assertThat(listBucket(bucketPath), hasSize(1));
+	}
+
 	// ------------------------------- Utility Methods --------------------------------
 
 	private static Buckets<String, String> createBuckets(
@@ -571,7 +616,8 @@ public class BucketsTest {
 			final RollingPolicy<String, String> rollingPolicy,
 			final int subtaskIdx,
 			final ListState<byte[]> bucketState,
-			final ListState<Long> partCounterState) throws Exception {
+			final ListState<Long> partCounterState,
+			final ListState<Integer> previousSubtaskIndexState) throws Exception {
 		return restoreBuckets(
 				basePath,
 				rollingPolicy,
@@ -580,6 +626,7 @@ public class BucketsTest {
 				subtaskIdx,
 				bucketState,
 				partCounterState,
+				previousSubtaskIndexState,
 				OutputFileConfig.builder().build());
 	}
 
@@ -591,6 +638,7 @@ public class BucketsTest {
 			final int subtaskIdx,
 			final ListState<byte[]> bucketState,
 			final ListState<Long> partCounterState,
+			final ListState<Integer> previousSubtaskIndexState,
 			final OutputFileConfig outputFileConfig) throws Exception {
 		final Buckets<String, String> restoredBuckets = createBuckets(
 			basePath,
@@ -599,7 +647,11 @@ public class BucketsTest {
 			fileLifeCycleListener,
 			subtaskIdx,
 			outputFileConfig);
-		restoredBuckets.initializeState(bucketState, partCounterState);
+		restoredBuckets.initializeState(bucketState, partCounterState, previousSubtaskIndexState);
 		return restoredBuckets;
+	}
+
+	private List<java.nio.file.Path> listBucket(final java.nio.file.Path bucketFolder) throws IOException {
+		return Files.list(bucketFolder).collect(Collectors.toList());
 	}
 }

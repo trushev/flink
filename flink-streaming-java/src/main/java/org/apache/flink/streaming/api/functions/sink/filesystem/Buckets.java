@@ -32,9 +32,14 @@ import org.slf4j.LoggerFactory;
 import javax.annotation.Nullable;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The manager of the different active buckets in the {@link StreamingFileSink}.
@@ -70,6 +75,8 @@ public class Buckets<IN, BucketID> {
 	private final Buckets.BucketerContext bucketerContext;
 
 	private final Map<BucketID, Bucket<IN, BucketID>> activeBuckets;
+
+	private final Collection<Bucket<IN, BucketID>> inactiveBuckets;
 
 	private long maxPartCounter;
 
@@ -113,6 +120,7 @@ public class Buckets<IN, BucketID> {
 		this.outputFileConfig = Preconditions.checkNotNull(outputFileConfig);
 
 		this.activeBuckets = new HashMap<>();
+		this.inactiveBuckets = new ArrayList<>();
 		this.bucketerContext = new Buckets.BucketerContext();
 
 		this.bucketStateSerializer = new BucketStateSerializer<>(
@@ -143,16 +151,37 @@ public class Buckets<IN, BucketID> {
 	 * </ol>
 	 * @param bucketStates the state holding recovered state about active buckets.
 	 * @param partCounterState the state holding the max previously used part counters.
+	 * @param previousSubtaskIndexState the state holding previously subtask index.
 	 * @throws Exception if anything goes wrong during retrieving the state or restoring/committing of any
 	 * in-progress/pending part files
 	 */
-	public void initializeState(final ListState<byte[]> bucketStates, final ListState<Long> partCounterState) throws Exception {
+	public void initializeState(
+		final ListState<byte[]> bucketStates,
+		final ListState<Long> partCounterState,
+		final ListState<Integer> previousSubtaskIndexState
+	) throws Exception {
 
 		initializePartCounter(partCounterState);
 
 		LOG.info("Subtask {} initializing its state (max part counter={}).", subtaskIndex, maxPartCounter);
 
 		initializeActiveBuckets(bucketStates);
+
+		if (this.rollingPolicy.shouldRemoveOutdatedParts()) {
+			removeOutdatedParts(previousSubtaskIndexState);
+		}
+	}
+
+	/**
+	 * Removes outdated inprogress parts from buckets while state restoring.
+	 */
+	private void removeOutdatedParts(final ListState<Integer> previousSubtaskIndexState) throws Exception {
+		final Set<Integer> subtaskIndexesBuilder = new HashSet<>();
+		previousSubtaskIndexState.get().forEach(subtaskIndexesBuilder::add);
+		final Set<Integer> subtaskIndexes = Collections.unmodifiableSet(subtaskIndexesBuilder);
+		this.activeBuckets.values().forEach(bucket -> bucket.removeOutdatedParts(subtaskIndexes));
+		this.inactiveBuckets.forEach(bucket -> bucket.removeOutdatedParts(subtaskIndexes));
+		this.inactiveBuckets.clear();
 	}
 
 	private void initializePartCounter(final ListState<Long> partCounterState) throws Exception {
@@ -196,6 +225,7 @@ public class Buckets<IN, BucketID> {
 	private void updateActiveBucketId(final BucketID bucketId, final Bucket<IN, BucketID> restoredBucket) throws IOException {
 		if (!restoredBucket.isActive()) {
 			notifyBucketInactive(restoredBucket);
+			this.inactiveBuckets.add(restoredBucket);
 			return;
 		}
 
@@ -229,7 +259,8 @@ public class Buckets<IN, BucketID> {
 	public void snapshotState(
 			final long checkpointId,
 			final ListState<byte[]> bucketStatesContainer,
-			final ListState<Long> partCounterStateContainer) throws Exception {
+			final ListState<Long> partCounterStateContainer,
+			final ListState<Integer> previousSubtaskIndexStateContainer) throws Exception {
 
 		Preconditions.checkState(
 			bucketWriter != null && bucketStateSerializer != null,
@@ -240,14 +271,16 @@ public class Buckets<IN, BucketID> {
 
 		bucketStatesContainer.clear();
 		partCounterStateContainer.clear();
+		previousSubtaskIndexStateContainer.clear();
 
-		snapshotActiveBuckets(checkpointId, bucketStatesContainer);
+		snapshotActiveBuckets(checkpointId, bucketStatesContainer, previousSubtaskIndexStateContainer);
 		partCounterStateContainer.add(maxPartCounter);
 	}
 
 	private void snapshotActiveBuckets(
 			final long checkpointId,
-			final ListState<byte[]> bucketStatesContainer) throws Exception {
+			final ListState<byte[]> bucketStatesContainer,
+			final ListState<Integer> previousSubtaskIndexStateContainer) throws Exception {
 
 		for (Bucket<IN, BucketID> bucket : activeBuckets.values()) {
 			final BucketState<BucketID> bucketState = bucket.onReceptionOfCheckpoint(checkpointId);
@@ -256,6 +289,7 @@ public class Buckets<IN, BucketID> {
 					.writeVersionAndSerialize(bucketStateSerializer, bucketState);
 
 			bucketStatesContainer.add(serializedBucketState);
+			previousSubtaskIndexStateContainer.add(subtaskIndex);
 
 			if (LOG.isDebugEnabled()) {
 				LOG.debug("Subtask {} checkpointing: {}", subtaskIndex, bucketState);

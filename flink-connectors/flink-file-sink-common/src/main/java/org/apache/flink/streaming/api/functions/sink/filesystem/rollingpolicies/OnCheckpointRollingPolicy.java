@@ -30,7 +30,13 @@ public final class OnCheckpointRollingPolicy<IN, BucketID> extends CheckpointRol
 
 	private static final long serialVersionUID = 1L;
 
-	private OnCheckpointRollingPolicy() {}
+	private static final boolean DEFAULT_REMOVE_OUTDATED_PARTS = false;
+
+	private final boolean removeOutdatedParts;
+
+	private OnCheckpointRollingPolicy(final PolicyBuilder<IN, BucketID> builder) {
+		this.removeOutdatedParts = builder.removeOutdatedParts;
+	}
 
 	@Override
 	public boolean shouldRollOnEvent(PartFileInfo<BucketID> partFileState, IN element) {
@@ -42,7 +48,38 @@ public final class OnCheckpointRollingPolicy<IN, BucketID> extends CheckpointRol
 		return false;
 	}
 
+	@Override
+	public boolean shouldRemoveOutdatedParts() {
+		return this.removeOutdatedParts;
+	}
+
+	public static <IN, BucketID> PolicyBuilder<IN, BucketID> builder() {
+		return new PolicyBuilder<>();
+	}
+
 	public static <IN, BucketID> OnCheckpointRollingPolicy<IN, BucketID> build() {
-		return new OnCheckpointRollingPolicy<>();
+		return new OnCheckpointRollingPolicy<>(new PolicyBuilder<>());
+	}
+
+	@PublicEvolving
+	public static class PolicyBuilder<IN, BucketID>
+		extends CheckpointRollingPolicy.PolicyBuilder<IN, BucketID, PolicyBuilder<IN, BucketID>> {
+
+		private boolean removeOutdatedParts = DEFAULT_REMOVE_OUTDATED_PARTS;
+
+		public PolicyBuilder<IN, BucketID> removeOutdatedParts(final boolean removeOutdatedParts) {
+			this.removeOutdatedParts = removeOutdatedParts;
+			return this;
+		}
+
+		@Override
+		protected PolicyBuilder<IN, BucketID> self() {
+			return this;
+		}
+
+		@Override
+		public CheckpointRollingPolicy<IN, BucketID> build() {
+			return new OnCheckpointRollingPolicy<>(this);
+		}
 	}
 }
