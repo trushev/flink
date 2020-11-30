@@ -61,6 +61,9 @@ public final class OnCheckpointRollingPolicy<IN, BucketID> extends CheckpointRol
 		return new OnCheckpointRollingPolicy<>(new PolicyBuilder<>());
 	}
 
+	/**
+	 * Builder class for {@link OnCheckpointRollingPolicy}.
+	 */
 	@PublicEvolving
 	public static class PolicyBuilder<IN, BucketID>
 		extends CheckpointRollingPolicy.PolicyBuilder<IN, BucketID, PolicyBuilder<IN, BucketID>> {
