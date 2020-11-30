@@ -400,6 +400,12 @@ public class FileUploadHandlerTest extends TestLogger {
 			Field field = clazz.getDeclaredField("files");
 			field.setAccessible(true);
 			LinkedHashSet files = (LinkedHashSet) field.get(null);
+			System.out.println("FILES!!!: " + files);
+			try {
+				Thread.sleep(500);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 			assertTrue(files.isEmpty());
 		} catch (ClassNotFoundException | IllegalAccessException | NoSuchFieldException e) {
 			fail("This should never happen.");
