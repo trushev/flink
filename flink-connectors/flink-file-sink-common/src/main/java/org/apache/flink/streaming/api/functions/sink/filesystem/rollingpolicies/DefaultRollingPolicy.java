@@ -47,16 +47,20 @@ public final class DefaultRollingPolicy<IN, BucketID> implements RollingPolicy<I
 
 	private static final long DEFAULT_MAX_PART_SIZE = 1024L * 1024L * 128L;
 
+	private static final boolean DEFAULT_REMOVE_OUTDATED_PARTS = false;
+
 	private final long partSize;
 
 	private final long rolloverInterval;
 
 	private final long inactivityInterval;
 
+	private final boolean removeOutdatedParts;
+
 	/**
 	 * Private constructor to avoid direct instantiation.
 	 */
-	private DefaultRollingPolicy(long partSize, long rolloverInterval, long inactivityInterval) {
+	private DefaultRollingPolicy(long partSize, long rolloverInterval, long inactivityInterval, boolean removeOutdatedParts) {
 		Preconditions.checkArgument(partSize > 0L);
 		Preconditions.checkArgument(rolloverInterval > 0L);
 		Preconditions.checkArgument(inactivityInterval > 0L);
@@ -64,6 +68,7 @@ public final class DefaultRollingPolicy<IN, BucketID> implements RollingPolicy<I
 		this.partSize = partSize;
 		this.rolloverInterval = rolloverInterval;
 		this.inactivityInterval = inactivityInterval;
+		this.removeOutdatedParts = removeOutdatedParts;
 	}
 
 	@Override
@@ -80,6 +85,11 @@ public final class DefaultRollingPolicy<IN, BucketID> implements RollingPolicy<I
 	public boolean shouldRollOnProcessingTime(final PartFileInfo<BucketID> partFileState, final long currentTime) {
 		return currentTime - partFileState.getCreationTime() >= rolloverInterval ||
 				currentTime - partFileState.getLastUpdateTime() >= inactivityInterval;
+	}
+
+	@Override
+	public boolean shouldRemoveOutdatedParts() {
+		return this.removeOutdatedParts;
 	}
 
 	/**
@@ -114,7 +124,8 @@ public final class DefaultRollingPolicy<IN, BucketID> implements RollingPolicy<I
 		return new DefaultRollingPolicy.PolicyBuilder(
 				DEFAULT_MAX_PART_SIZE,
 				DEFAULT_ROLLOVER_INTERVAL,
-				DEFAULT_INACTIVITY_INTERVAL);
+				DEFAULT_INACTIVITY_INTERVAL,
+				DEFAULT_REMOVE_OUTDATED_PARTS);
 	}
 
 	/**
@@ -138,13 +149,17 @@ public final class DefaultRollingPolicy<IN, BucketID> implements RollingPolicy<I
 
 		private final long inactivityInterval;
 
+		private final boolean removeOutdatedParts;
+
 		private PolicyBuilder(
 				final long partSize,
 				final long rolloverInterval,
-				final long inactivityInterval) {
+				final long inactivityInterval,
+				final boolean removeOutdatedParts) {
 			this.partSize = partSize;
 			this.rolloverInterval = rolloverInterval;
 			this.inactivityInterval = inactivityInterval;
+			this.removeOutdatedParts = removeOutdatedParts;
 		}
 
 		/**
@@ -153,7 +168,7 @@ public final class DefaultRollingPolicy<IN, BucketID> implements RollingPolicy<I
 		 */
 		public DefaultRollingPolicy.PolicyBuilder withMaxPartSize(final long size) {
 			Preconditions.checkState(size > 0L);
-			return new PolicyBuilder(size, rolloverInterval, inactivityInterval);
+			return new PolicyBuilder(size, rolloverInterval, inactivityInterval, removeOutdatedParts);
 		}
 
 		/**
@@ -165,7 +180,7 @@ public final class DefaultRollingPolicy<IN, BucketID> implements RollingPolicy<I
 		 */
 		public DefaultRollingPolicy.PolicyBuilder withInactivityInterval(final long interval) {
 			Preconditions.checkState(interval > 0L);
-			return new PolicyBuilder(partSize, rolloverInterval, interval);
+			return new PolicyBuilder(partSize, rolloverInterval, interval, removeOutdatedParts);
 		}
 
 		/**
@@ -177,14 +192,18 @@ public final class DefaultRollingPolicy<IN, BucketID> implements RollingPolicy<I
 		 */
 		public DefaultRollingPolicy.PolicyBuilder withRolloverInterval(final long interval) {
 			Preconditions.checkState(interval > 0L);
-			return new PolicyBuilder(partSize, interval, inactivityInterval);
+			return new PolicyBuilder(partSize, interval, inactivityInterval, removeOutdatedParts);
+		}
+
+		public DefaultRollingPolicy.PolicyBuilder removeOutdatedParts(final boolean removeOutdatedParts) {
+			return new PolicyBuilder(partSize, rolloverInterval, inactivityInterval, removeOutdatedParts);
 		}
 
 		/**
 		 * Creates the actual policy.
 		 */
 		public <IN, BucketID> DefaultRollingPolicy<IN, BucketID> build() {
-			return new DefaultRollingPolicy<>(partSize, rolloverInterval, inactivityInterval);
+			return new DefaultRollingPolicy<>(partSize, rolloverInterval, inactivityInterval, removeOutdatedParts);
 		}
 	}
 }

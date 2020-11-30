@@ -22,6 +22,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
 import org.apache.flink.api.common.state.OperatorStateStore;
+import org.apache.flink.api.common.typeutils.base.IntSerializer;
 import org.apache.flink.api.common.typeutils.base.LongSerializer;
 import org.apache.flink.api.common.typeutils.base.array.BytePrimitiveArraySerializer;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
@@ -46,6 +47,9 @@ public class StreamingFileSinkHelper<IN> implements ProcessingTimeCallback {
 	private static final ListStateDescriptor<Long> MAX_PART_COUNTER_STATE_DESC =
 			new ListStateDescriptor<>("max-part-counter", LongSerializer.INSTANCE);
 
+	private static final ListStateDescriptor<Integer> PREVIOUS_SUBTASK_INDEX_STATE_DESC =
+		new ListStateDescriptor<>("previous-subtask-index", IntSerializer.INSTANCE);
+
 	// --------------------------- fields -----------------------------
 
 	private final long bucketCheckInterval;
@@ -58,6 +62,8 @@ public class StreamingFileSinkHelper<IN> implements ProcessingTimeCallback {
 
 	private final ListState<Long> maxPartCountersState;
 
+	private final ListState<Integer> previousSubtaskIndexState;
+
 	public StreamingFileSinkHelper(
 			Buckets<IN, ?> buckets,
 			boolean isRestored,
@@ -68,10 +74,11 @@ public class StreamingFileSinkHelper<IN> implements ProcessingTimeCallback {
 		this.buckets = buckets;
 		this.bucketStates = stateStore.getListState(BUCKET_STATE_DESC);
 		this.maxPartCountersState = stateStore.getUnionListState(MAX_PART_COUNTER_STATE_DESC);
+		this.previousSubtaskIndexState = stateStore.getListState(PREVIOUS_SUBTASK_INDEX_STATE_DESC);
 		this.procTimeService = procTimeService;
 
 		if (isRestored) {
-			buckets.initializeState(bucketStates, maxPartCountersState);
+			buckets.initializeState(bucketStates, maxPartCountersState, previousSubtaskIndexState);
 		}
 
 		long currentProcessingTime = procTimeService.getCurrentProcessingTime();
@@ -86,7 +93,8 @@ public class StreamingFileSinkHelper<IN> implements ProcessingTimeCallback {
 		buckets.snapshotState(
 				checkpointId,
 				bucketStates,
-				maxPartCountersState);
+				maxPartCountersState,
+				previousSubtaskIndexState);
 	}
 
 	@Override

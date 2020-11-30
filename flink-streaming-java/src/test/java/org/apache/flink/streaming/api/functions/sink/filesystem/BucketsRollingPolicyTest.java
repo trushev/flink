@@ -84,7 +84,7 @@ public class BucketsRollingPolicyTest {
 		rollingPolicy.verifyCallCounters(0L, 0L, 2L, 1L, 3L, 2L);
 
 		// we take a checkpoint but we should not roll.
-		buckets.snapshotState(1L, new TestUtils.MockListState<>(), new TestUtils.MockListState<>());
+		buckets.snapshotState(1L, new TestUtils.MockListState<>(), new TestUtils.MockListState<>(), new TestUtils.MockListState<>());
 		rollingPolicy.verifyCallCounters(0L, 0L, 2L, 1L, 3L, 2L);
 	}
 
@@ -118,14 +118,14 @@ public class BucketsRollingPolicyTest {
 		buckets.onElement("test1", new TestUtils.MockSinkContext(3L, 1L, 3L));
 
 		// ... we have a checkpoint so we roll ...
-		buckets.snapshotState(1L, new TestUtils.MockListState<>(), new TestUtils.MockListState<>());
+		buckets.snapshotState(1L, new TestUtils.MockListState<>(), new TestUtils.MockListState<>(), new TestUtils.MockListState<>());
 		rollingPolicy.verifyCallCounters(1L, 1L, 2L, 0L, 0L, 0L);
 
 		// ... create a new in-progress file (before we had closed the last one so it was null)...
 		buckets.onElement("test1", new TestUtils.MockSinkContext(5L, 1L, 5L));
 
 		// ... we have a checkpoint so we roll ...
-		buckets.snapshotState(2L, new TestUtils.MockListState<>(), new TestUtils.MockListState<>());
+		buckets.snapshotState(2L, new TestUtils.MockListState<>(), new TestUtils.MockListState<>(), new TestUtils.MockListState<>());
 		rollingPolicy.verifyCallCounters(2L, 2L, 2L, 0L, 0L, 0L);
 
 		buckets.close();
@@ -174,7 +174,7 @@ public class BucketsRollingPolicyTest {
 		rollingPolicy.verifyCallCounters(0L, 0L, 2L, 1L, 0L, 0L);
 
 		// ... we have a checkpoint so we roll ...
-		buckets.snapshotState(1L, new TestUtils.MockListState<>(), new TestUtils.MockListState<>());
+		buckets.snapshotState(1L, new TestUtils.MockListState<>(), new TestUtils.MockListState<>(), new TestUtils.MockListState<>());
 		rollingPolicy.verifyCallCounters(1L, 1L, 2L, 1L, 0L, 0L);
 
 		// ... create a new in-progress file (before we had closed the last one so it was null)...
